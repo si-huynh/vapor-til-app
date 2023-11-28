@@ -35,7 +35,7 @@ public func configure(_ app: Application) async throws {
 	app.migrations.add(CreateAcronymCategoryPivot())
 	app.migrations.add(CreateToken())
 	app.migrations.add(CreateAdminUser())
-	app.logger.logLevel = .error
+	app.logger.logLevel = .debug
 	
 	try await app.autoMigrate()
 	

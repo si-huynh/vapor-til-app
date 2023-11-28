@@ -6,6 +6,7 @@
 //
 
 import ImperialGoogle
+import ImperialGitHub
 import Vapor
 import Fluent
 
@@ -23,6 +24,18 @@ struct ImperialController: RouteCollection {
 			callback: googleCallbackURL,
 			scope: ["profile", "email"],
 			completion: processGoogleLogin)
+		
+		guard let githubCallbackURL = Environment.get("GITHUB_CALLBACK_URL")
+		else {
+			fatalError("Github Callback URL not set")
+		}
+		
+		try routes.oAuth(
+			from: GitHub.self,
+			authenticate: "login-github",
+			callback: githubCallbackURL,
+			completion: processGithubLogin
+		)
 	}
 	
 	func processGoogleLogin(request: Request, token: String) throws -> EventLoopFuture<ResponseEncodable> {
@@ -42,6 +55,28 @@ struct ImperialController: RouteCollection {
 							return newUser.save(on: request.db)
 								.map {
 									request.session.authenticate(newUser)
+									return request.redirect(to: "/")
+								}
+						}
+						request.session.authenticate(existingUser)
+						return request.eventLoop.future(request.redirect(to: "/"))
+					}
+			}
+	}
+	
+	func processGithubLogin(request: Request, token: String) throws -> EventLoopFuture<ResponseEncodable> {
+		return try GitHub.getUser(on: request)
+			.flatMap { userInfo in
+				return User.query(on: request.db)
+					.filter(\.$username == userInfo.login)
+					.first()
+					.flatMap { foundUser in
+						guard let existingUser = foundUser
+						else {
+							let user = User(name: userInfo.name, username: userInfo.login, password: UUID().uuidString)
+							return user.save(on: request.db)
+								.map {
+									request.session.authenticate(user)
 									return request.redirect(to: "/")
 								}
 						}
@@ -98,6 +133,34 @@ extension Google {
 				}
 				
 				return try response.content.decode(GoogleUserInfo.self)
+			}
+	}
+}
+
+struct GitHubUserInfo: Content {
+	let name: String
+	let login: String
+}
+
+extension GitHub {
+	static func getUser(on request: Request) throws -> EventLoopFuture<GitHubUserInfo> {
+		var headers = HTTPHeaders()
+		try headers.add(name: .authorization, value: "token \(request.accessToken())")
+		headers.add(name: .userAgent, value: "vapor")
+		
+		let githubUserAPIURL: URI = "https://api.github.com/user"
+		
+		return request.client.get(githubUserAPIURL, headers: headers)
+			.flatMapThrowing { response in
+				guard response.status == .ok else {
+					if response.status == .unauthorized {
+						throw Abort.redirect(to: "/login-github")
+					} else {
+						throw Abort(.internalServerError)
+					}
+				}
+				
+				return try response.content.decode(GitHubUserInfo.self)
 			}
 	}
 }

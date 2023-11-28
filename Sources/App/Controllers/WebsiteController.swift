@@ -7,6 +7,7 @@
 
 import Vapor
 import Leaf
+import Fluent
 
 struct WebsiteController: RouteCollection {
 	func boot(routes: RoutesBuilder) throws {
@@ -27,6 +28,9 @@ struct WebsiteController: RouteCollection {
 		
 		authSessionsRoutes.get("register", use: registerHandler)
 		authSessionsRoutes.post("register", use: registerPostHandler)
+
+		authSessionsRoutes.post("login", "siwa", "callback", use: appleAuthCallbackHandler)
+		authSessionsRoutes.post("login", "siwa", "handle", use: appleAuthRedirectHandler)
 		
 		let protectedRoutes = authSessionsRoutes.grouped(User.redirectMiddleware(path: "/login"))
 		
@@ -204,24 +208,46 @@ struct WebsiteController: RouteCollection {
 		return req.redirect(to: "/")
 	}
 	
-	func loginHandler(_ req: Request) async throws -> View {
+	func loginHandler(_ req: Request) async throws -> Response {
 		let context: LoginContext
-		
+		let siwaContext = try buildSIWAContext(on: req)
+
 		if let error = req.query[Bool.self, at: "error"], error {
-			context = LoginContext(loginError: true)
+			context = LoginContext(loginError: true, siwaContext: siwaContext)
 		} else {
-			context = LoginContext()
+			context = LoginContext(siwaContext: siwaContext)
 		}
 		
-		return try await req.view.render("login", context)
+		let response = try await req.view.render("login", context).encodeResponse(for: req).get()
+		let expiryDate = Date().addingTimeInterval(300)
+		let cookie = HTTPCookies.Value(
+			string: siwaContext.state,
+			expires: expiryDate,
+			maxAge: 300,
+			isHTTPOnly: true,
+			sameSite: HTTPCookies.SameSitePolicy.none
+		)
+		response.cookies["SIWA_STATE"] = cookie
+		return response
 	}
 	
 	func loginPostHandler(_ req: Request) async throws -> Response {
 		if req.auth.has(User.self) {
 			return req.redirect(to: "/")
 		} else {
-			let context = LoginContext(loginError: true)
-			return try await req.view.render("login", context).encodeResponse(for: req)
+			let siwaContext = try buildSIWAContext(on: req)
+			let context = LoginContext(loginError: true, siwaContext: siwaContext)
+			let response = try await req.view.render("login", context).encodeResponse(for: req).get()
+			let expiryDate = Date().addingTimeInterval(300)
+			let cookie = HTTPCookies.Value(
+				string: siwaContext.state,
+				expires: expiryDate,
+				maxAge: 300,
+				isHTTPOnly: true,
+				sameSite: HTTPCookies.SameSitePolicy.none
+			)
+			response.cookies["SIWA_STATE"] = cookie
+			return response
 		}
 	}
 	
@@ -230,14 +256,25 @@ struct WebsiteController: RouteCollection {
 		return req.redirect(to: "/")
 	}
 	
-	func registerHandler(_ req: Request) async throws -> View {
+	func registerHandler(_ req: Request) async throws -> Response {
+		let siwaContext = try buildSIWAContext(on: req)
 		let context: RegisterContext
 		if let message = req.query[String.self, at: "message"] {
-			context = RegisterContext(message: message)
+			context = RegisterContext(message: message, siwaContext: siwaContext)
 		} else {
-			context = RegisterContext()
+			context = RegisterContext(siwaContext: siwaContext)
 		}
-		return try await req.view.render("register", context)
+		let response = try await req.view.render("register", context).encodeResponse(for: req).get()
+		let expiryDate = Date().addingTimeInterval(300)
+			let cookie = HTTPCookies.Value(
+				string: siwaContext.state,
+				expires: expiryDate,
+				maxAge: 300,
+				isHTTPOnly: true,
+				sameSite: HTTPCookies.SameSitePolicy.none
+			)
+		response.cookies["SIWA_STATE"] = cookie
+		return response
 	}
 	
 	func registerPostHandler(_ req: Request) async throws -> Response {
@@ -261,6 +298,83 @@ struct WebsiteController: RouteCollection {
 		req.auth.login(user)
 		
 		return req.redirect(to: "/")
+	}
+	
+	func appleAuthCallbackHandler(_ req: Request) async throws -> View {
+		let siwaData = try req.content.decode(AppleAuthorizationResponse.self)
+		
+		guard let sessionState = req.cookies["SIWA_STATE"]?.string,
+			  !sessionState.isEmpty,
+			  sessionState == siwaData.state
+		else {
+			req.logger.warning("SIWA does not exist or does not match")
+			throw Abort(.unauthorized)
+		}
+		
+		let siwaContext = SIWAHandleContext(
+			token: siwaData.idToken,
+			email: siwaData.user?.email,
+			firstName: siwaData.user?.name?.firstName,
+			lastName: siwaData.user?.name?.lastName
+		)
+		
+		return try await req.view.render("siwaHandler", siwaContext)
+	}
+
+	func appleAuthRedirectHandler(_ req: Request) async throws -> Response {
+		let data = try req.content.decode(SIWARedirectData.self)
+		
+		guard let appIdentifier = Environment.get("WEBSITE_APPLICATION_IDENTIFIER")
+		else {
+			throw Abort(.internalServerError)
+		}
+
+		let siwaToken = try await req.jwt.apple.verify(data.token, applicationIdentifier: appIdentifier)
+		let user = try await User.query(on: req.db)
+			.filter(\.$siwaIdentifier == siwaToken.subject.value)
+			.first()
+		
+		if let user = user {
+			req.auth.login(user)
+			return req.redirect(to: "/")
+		} else {
+			guard let email = data.email,
+				  let firstName = data.firstName,
+				  let lastName = data.lastName
+			else {
+				throw Abort(.badRequest)
+			}
+			
+			let user = User(
+				name: "\(firstName) \(lastName)",
+				username: email,
+				password: UUID().uuidString,
+				siwaIdentifier: siwaToken.subject.value
+			)
+
+			try await user.save(on: req.db)
+			req.auth.login(user)
+			return req.redirect(to: "/")
+		}
+	}
+
+	private func buildSIWAContext(on req: Request) throws -> SIWAContext {
+		let state = [UInt8].random(count: 32).base64
+		let scopes = "name email"
+
+		guard let clientID = Environment.get("WEBSITE_APPLICATION_IDENTIFIER")
+		else {
+			req.logger.error("WEBSITE_APPLICATION_IDENTIFIER not set")
+			throw Abort(.internalServerError)
+		}
+
+		guard let redirectURI = Environment.get("SIWA_REDIRECT_URL")
+		else {
+			req.logger.error("SIWA_REDIRECT_URL not set")
+			throw Abort(.internalServerError)
+		}
+
+		return SIWAContext(clientID: clientID, scopes: scopes, redirectURI: redirectURI, state: state)
 	}
 }
 
@@ -322,18 +436,22 @@ struct CreateAcronymFormData: Content {
 struct LoginContext: Encodable {
 	let title = "Log In"
 	let loginError: Bool
+	let siwaContext: SIWAContext
 	
-	init(loginError: Bool = false) {
+	init(loginError: Bool = false, siwaContext: SIWAContext) {
 		self.loginError = loginError
+		self.siwaContext = siwaContext
 	}
 }
 
 struct RegisterContext: Encodable {
 	let title = "Register"
 	let message: String?
+	let siwaContext: SIWAContext
 	
-	init(message: String? = nil) {
+	init(message: String? = nil, siwaContext: SIWAContext) {
 		self.message = message
+		self.siwaContext = siwaContext
 	}
 }
 
@@ -391,3 +509,60 @@ extension Validator where T == String {
 	}
 }
 
+struct AppleAuthorizationResponse: Decodable {
+	struct User: Decodable {
+		struct Name: Decodable {
+			let firstName: String?
+			let lastName: String?
+		}
+		let email: String
+		let name: Name?
+	}
+	
+	let code: String
+	let state: String
+	let idToken: String
+	let user: User?
+	
+	enum CodingKeys: String, CodingKey {
+		case code
+		case state
+		case idToken = "id_token"
+		case user
+	}
+	
+	init(from decoder: Decoder) throws {
+		let values = try decoder.container(keyedBy: CodingKeys.self)
+		code = try values.decode(String.self, forKey: .code)
+		state = try values.decode(String.self, forKey: .state)
+		idToken = try values.decode(String.self, forKey: .idToken)
+		
+		if let jsonString = try values.decodeIfPresent(String.self, forKey: .user),
+		   let jsonData = jsonString.data(using: .utf8) {
+			self.user = try JSONDecoder().decode(User.self, from: jsonData)
+		} else {
+			user = nil
+		}
+	}
+}
+
+struct SIWAHandleContext: Encodable {
+	let token: String
+	let email: String?
+	let firstName: String?
+	let lastName: String?
+}
+
+struct SIWARedirectData: Content {
+	let token: String
+	let email: String?
+	let firstName: String?
+	let lastName: String?
+}
+
+struct SIWAContext: Encodable {
+	let clientID: String
+	let scopes: String
+	let redirectURI: String
+	let state: String
+}

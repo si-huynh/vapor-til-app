@@ -6,6 +6,8 @@
 //
 
 import Vapor
+import JWT
+import Fluent
 
 struct UsersController: RouteCollection {
 	func boot(routes: RoutesBuilder) throws {
@@ -13,6 +15,7 @@ struct UsersController: RouteCollection {
 		usersRoute.get(use: getAllHandler)
 		usersRoute.get(":userID", use: getHandler)
 		usersRoute.get(":userID", "acronyms", use: getAcronymsHandler)
+		usersRoute.post("siwa", use: signInWithApple)
 		
 		let basicAuthMiddleware = User.authenticator()
 		let basicAuthGroup = usersRoute.grouped(basicAuthMiddleware)
@@ -65,4 +68,42 @@ struct UsersController: RouteCollection {
 		
 		return token
 	}
+	
+	func signInWithApple(_ req: Request) async throws -> Token {
+		let data = try req.content.decode(SignInWithAppleToken.self)
+		
+		guard let appIdentifier = Environment.get("IOS_APPLICATION_IDENTIFIER")
+		else {
+			throw Abort(.internalServerError)
+		}
+		
+		let siwaToken = try await req.jwt.apple.verify(data.token, applicationIdentifier: appIdentifier)
+		let user = try await User.query(on: req.db)
+			.filter(\.$siwaIdentifier == siwaToken.subject.value)
+			.first()
+		if let user = user {
+			return try await createTokenForUser(user, req: req)
+		} else {
+			guard let email = siwaToken.email, let name = data.name
+			else {
+				throw Abort(.badRequest)
+			}
+			
+			let user = User(name: name, username: email, password: UUID().uuidString, siwaIdentifier: siwaToken.subject.value)
+			try await user.save(on: req.db)
+			
+			return try await createTokenForUser(user, req: req)
+		}
+	}
+	
+	func createTokenForUser(_ user: User, req: Request) async throws -> Token {
+		let token = try Token.generate(for: user)
+		try await token.save(on: req.db)
+		return token
+	}
+}
+
+struct SignInWithAppleToken: Content {
+	let token: String
+	let name: String?
 }

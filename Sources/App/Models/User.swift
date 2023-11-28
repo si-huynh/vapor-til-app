@@ -26,12 +26,16 @@ final class User: Model, Content {
 	@Field(key: "password")
 	var password: String
 	
+	@OptionalField(key: "siwaIdentifier")
+	var siwaIdentifier: String?
+	
 	init() {}
 	
 	init(id: UUID? = nil, name: String, username: String, password: String) {
 		self.name = name
 		self.username = username
 		self.password = password
+		self.siwaIdentifier = siwaIdentifier
 	}
 	
 	final class Public: Content {

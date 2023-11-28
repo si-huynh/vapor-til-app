@@ -1,1 +1,4 @@
-{}
+{
+	"swift.sourcekit-lsp.serverPath": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/sourcekit-lsp",
+	"C_Cpp.errorSquiggles": "enabled"
+}
