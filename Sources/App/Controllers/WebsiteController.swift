@@ -11,6 +11,8 @@ import Fluent
 import SendGrid
 
 struct WebsiteController: RouteCollection {
+	let imageFolder = "ProfilePictures/"
+	
 	func boot(routes: RoutesBuilder) throws {
 		let authSessionsRoutes = routes.grouped(User.sessionAuthenticator())
 		authSessionsRoutes.get("login", use: loginHandler)
@@ -38,6 +40,8 @@ struct WebsiteController: RouteCollection {
 		authSessionsRoutes.get("resetPassword", use: resetPasswordHandler)
 		authSessionsRoutes.post("resetPassword", use: resetPasswordPostHandler)
 		
+		authSessionsRoutes.get("users", ":userID", "profilePicture", use: getUserProfilePictureHandler)
+		
 		let protectedRoutes = authSessionsRoutes.grouped(User.redirectMiddleware(path: "/login"))
 		
 		protectedRoutes.get("acronyms", "create", use: createAcronymHandler)
@@ -47,6 +51,14 @@ struct WebsiteController: RouteCollection {
 		protectedRoutes.post("acronyms", ":acronymID", "edit", use: editAcronymPostHandler)
 		
 		protectedRoutes.post("acronyms", ":acronymID", "delete", use: deleteAcronymHandler)
+		
+		protectedRoutes.get("users", ":userID", "addProfilePicture", use: addProfilePictureHandler)
+		protectedRoutes.on(
+			.POST,
+			"users", ":userID", "addProfilePicture",
+			body: .collect(maxSize: "10mb"),
+			use: addProfilePicturePostHandler
+		)
 	}
 	
 	func indexHandler(_ req: Request) async throws -> View {
@@ -87,7 +99,12 @@ struct WebsiteController: RouteCollection {
 		}
 		
 		let acronyms = try await user.$acronyms.get(on: req.db)
-		let context = UserContext(title: user.name, user: user, acronyms: acronyms)
+		let context = UserContext(
+			title: user.name,
+			user: user,
+			acronyms: acronyms,
+			authenticatedUser: user
+		)
 		return try await req.view.render("user", context)
 	}
 	
@@ -498,6 +515,50 @@ struct WebsiteController: RouteCollection {
 			throw Abort.redirect(to: "/")
 		}
 	}
+	
+	func addProfilePictureHandler(_ req: Request) async throws -> View {
+		guard let user = try await User.find(req.parameters.get("userID"), on: req.db)
+		else {
+			throw Abort(.notFound)
+		}
+		
+		return try await req.view.render("addProfilePicture", [
+			"title": "Add Profile Picture",
+			"username": user.name
+		])
+	}
+	
+	func addProfilePicturePostHandler(_ req: Request) async throws -> Response {
+		let data = try req.content.decode(ImageUploadData.self)
+		
+		guard let user = try await User.find(req.parameters.get("userID"), on: req.db)
+		else {
+			throw Abort(.notFound)
+		}
+		
+		let userID = try user.requireID()
+		let name = "\(userID)-\(UUID()).jpg"
+		
+		let path = req.application.directory.workingDirectory + imageFolder + name
+		
+		try await req.fileio.writeFile(.init(data: data.picture), at: path)
+		
+		user.profilePicture = name
+		try await user.save(on: req.db)
+		
+		return req.redirect(to: "/users/\(userID)")
+	}
+	
+	func getUserProfilePictureHandler(_ req: Request) async throws -> Response {
+		guard let user = try await User.find(req.parameters.get("userID"), on: req.db),
+			  let filename = user.profilePicture
+		else {
+			throw Abort(.notFound)
+		}
+		
+		let path = req.application.directory.workingDirectory + imageFolder + filename
+		return req.fileio.streamFile(at: path)
+	}
 }
 
 struct IndexContext: Encodable {
@@ -518,6 +579,7 @@ struct UserContext: Encodable {
 	let title: String
 	let user: User
 	let acronyms: [Acronym]
+	let authenticatedUser: User?
 }
 
 struct AllUsersContext: Encodable {
@@ -703,4 +765,8 @@ struct ResetPasswordContext: Encodable {
 struct ResetPasswordData: Content {
 	let password: String
 	let confirmPassword: String
+}
+
+struct ImageUploadData: Content {
+	let picture: Data
 }
