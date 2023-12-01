@@ -20,6 +20,9 @@ final class User: Model, Content {
 	@Field(key: "username")
 	var username: String
 	
+	@Field(key: "email")
+	var email: String
+	
 	@Children(for: \.$user)
 	var acronyms: [Acronym]
 	
@@ -31,9 +34,17 @@ final class User: Model, Content {
 	
 	init() {}
 	
-	init(id: UUID? = nil, name: String, username: String, password: String, siwaIdentifier: String?) {
+	init(
+		id: UUID? = nil,
+		name: String,
+		username: String,
+		email: String,
+		password: String,
+		siwaIdentifier: String? = nil
+	) {
 		self.name = name
 		self.username = username
+		self.email = email
 		self.password = password
 		self.siwaIdentifier = siwaIdentifier
 	}

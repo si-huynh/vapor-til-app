@@ -60,6 +60,7 @@ extension XCTApplicationTester {
 				userToLogin = User(
 					name: "Admin",
 					username: "admin",
+					email: "admin@localhost.local",
 					password: "password"
 				)
 			}

@@ -89,7 +89,13 @@ struct UsersController: RouteCollection {
 				throw Abort(.badRequest)
 			}
 			
-			let user = User(name: name, username: email, password: UUID().uuidString, siwaIdentifier: siwaToken.subject.value)
+			let user = User(
+				name: name,
+				username: email,
+				email: email,
+				password: UUID().uuidString,
+				siwaIdentifier: siwaToken.subject.value
+			)
 			try await user.save(on: req.db)
 			
 			return try await createTokenForUser(user, req: req)

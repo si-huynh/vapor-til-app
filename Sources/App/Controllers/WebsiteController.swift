@@ -8,6 +8,7 @@
 import Vapor
 import Leaf
 import Fluent
+import SendGrid
 
 struct WebsiteController: RouteCollection {
 	func boot(routes: RoutesBuilder) throws {
@@ -31,6 +32,11 @@ struct WebsiteController: RouteCollection {
 
 		authSessionsRoutes.post("login", "siwa", "callback", use: appleAuthCallbackHandler)
 		authSessionsRoutes.post("login", "siwa", "handle", use: appleAuthRedirectHandler)
+		
+		authSessionsRoutes.get("forgottenPassword", use: forgottenPasswordHandler)
+		authSessionsRoutes.post("forgottenPassword", use: forgottenPasswordPostHandler)
+		authSessionsRoutes.get("resetPassword", use: resetPasswordHandler)
+		authSessionsRoutes.post("resetPassword", use: resetPasswordPostHandler)
 		
 		let protectedRoutes = authSessionsRoutes.grouped(User.redirectMiddleware(path: "/login"))
 		
@@ -287,7 +293,12 @@ struct WebsiteController: RouteCollection {
 		
 		let data = try req.content.decode(RegisterData.self)
 		let password = try Bcrypt.hash(data.password)
-		let user = User(name: data.name, username: data.username, password: password)
+		let user = User(
+			name: data.name,
+			username: data.username,
+			email: data.emailAddress,
+			password: password
+		)
 		
 		try await user.save(on: req.db)
 		
@@ -348,11 +359,17 @@ struct WebsiteController: RouteCollection {
 			let user = User(
 				name: "\(firstName) \(lastName)",
 				username: email,
+				email: email,
 				password: UUID().uuidString,
 				siwaIdentifier: siwaToken.subject.value
 			)
 
 			try await user.save(on: req.db)
+			
+			guard user.id != nil else {
+				throw Abort(.internalServerError)
+			}
+			
 			req.auth.login(user)
 			return req.redirect(to: "/")
 		}
@@ -375,6 +392,111 @@ struct WebsiteController: RouteCollection {
 		}
 
 		return SIWAContext(clientID: clientID, scopes: scopes, redirectURI: redirectURI, state: state)
+	}
+	
+	func forgottenPasswordHandler(_ req: Request) async throws -> View {
+		try await req.view.render(
+			"forgottenPassword",
+			["title": "Reset Your Password"]
+		)
+	}
+	
+	func forgottenPasswordPostHandler(_ req: Request) async throws -> View {
+		let email = try req.content.get(String.self, at: "email")
+		
+		guard let user = try await User.query(on: req.db).filter(\.$email == email).first() else {
+			return try await req.view.render(
+				"forgottenPasswordConfirmed",
+				["title": "Password Reset Email Sent"]
+			)
+		}
+		
+		let resetTokenString = Data([UInt8].random(count: 32)).base32EncodedString()
+		let resetToken: ResetPasswordToken
+		do {
+			resetToken = try ResetPasswordToken(token: resetTokenString, userID: user.requireID())
+		} catch {
+			throw Abort(.internalServerError, reason: error.localizedDescription)
+		}
+		
+		do {
+			try await resetToken.save(on: req.db)
+		} catch {
+			throw Abort(.internalServerError, reason: error.localizedDescription)
+		}
+		
+		let emailContent = """
+				<p>You've requested to reset your password. <a
+				href="http://localhost:8080/resetPassword?\
+				token=\(resetTokenString)">
+				Click here</a> to reset your password.</p>
+				"""
+		let emailAddress = EmailAddress(email: user.email, name: user.name)
+		let fromEmail = EmailAddress(email: "sobs.fizz-0n@icloud.com", name: "Vapor TIL")
+		let emailConfig = Personalization(to: [emailAddress], subject: "Reset Your Password")
+		let sendGridEmail = SendGridEmail(
+		  personalizations: [emailConfig],
+		  from: fromEmail,
+		  content: [EmailContent(type: "text/html", value: emailContent)]
+		)
+		
+		do {
+			try await req.application.sendgrid.client.send(email: sendGridEmail)
+		} catch {
+			throw Abort(.internalServerError, reason: error.localizedDescription)
+		}
+		
+		return try await req.view.render(
+			"forgottenPasswordConfirmed",
+			["title": "Password Reset Email Sent"]
+		)
+	}
+	
+	func resetPasswordHandler(_ req: Request) async throws -> View {
+		guard let tokenString = try? req.query.get(String.self, at: "token")
+		else {
+			return try await req.view.render("resetPassword", ResetPasswordContext(error: true))
+		}
+		
+		guard let token = try await ResetPasswordToken.query(on: req.db).filter(\.$token == tokenString).first()
+		else {
+			throw Abort.redirect(to: "/")
+		}
+		
+		let user = try await token.$user.get(on: req.db)
+		
+		do {
+			try req.session.set("ResetPasswordUser", to: user)
+			try await token.delete(on: req.db)
+			
+			return try await req.view.render("resetPassword", ResetPasswordContext())
+		} catch {
+			throw Abort(.internalServerError, reason: error.localizedDescription)
+		}
+	}
+	
+	func resetPasswordPostHandler(_ req: Request) async throws -> Response {
+		let data = try req.content.decode(ResetPasswordData.self)
+		guard data.password == data.confirmPassword
+		else {
+			return try await req.view.render("resetPassword", ResetPasswordContext(error: true))
+				.encodeResponse(for: req).get()
+		}
+		
+		let resetPasswordUser = try req.session.get("ResetPasswordUser", as: User.self)
+		req.session.data["ResetPasswordUser"] = nil
+		
+		let newPassword = try Bcrypt.hash(data.password)
+		
+		do {
+			try await User.query(on: req.db)
+				.filter(\.$id == resetPasswordUser.requireID())
+				.set(\.$password, to: newPassword)
+				.update()
+			return req.redirect(to: "/login")
+		} catch {
+			throw Abort.redirect(to: "/")
+		}
 	}
 }
 
@@ -459,6 +581,7 @@ struct RegisterData: Content {
 	let name: String
 	let username: String
 	let password: String
+	let emailAddress: String
 	let confirmPassword: String
 }
 
@@ -466,6 +589,7 @@ extension RegisterData: Validatable {
 	static func validations(_ validations: inout Validations) {
 		validations.add("name", as: String.self, is: .ascii)
 		validations.add("username", as: String.self, is: .alphanumeric && .count(3...10))
+		validations.add("emailAddress", as: String.self, is: .email)
 		validations.add("password", as: String.self, is: .count(6...24))
 		validations.add("zipCode", as: String.self, is: .zipCode, required: false)
 	}
@@ -565,4 +689,18 @@ struct SIWAContext: Encodable {
 	let scopes: String
 	let redirectURI: String
 	let state: String
+}
+
+struct ResetPasswordContext: Encodable {
+	let title = "Reset Password"
+	let error: Bool?
+	
+	init(error: Bool? = false) {
+		self.error = error
+	}
+}
+
+struct ResetPasswordData: Content {
+	let password: String
+	let confirmPassword: String
 }

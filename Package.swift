@@ -13,9 +13,14 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent.git", from: "4.8.0"),
         // 🐘 Fluent driver for Postgres.
         .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.7.2"),
+		// 🍀 A powerful templating language.
 		.package(url: "https://github.com/vapor/leaf.git", from: "4.2.4"),
-		.package(url: "https://github.com/vapor-community/Imperial.git", .upToNextMajor(from: "1.2.0")),
-		.package(url: "https://github.com/vapor/jwt.git", .upToNextMajor(from: "4.2.2")),
+		// 🔑 A Federated Login service.
+		.package(url: "https://github.com/vapor-community/Imperial.git", from: "1.2.0"),
+		// 🔑 JSON Web Token.
+		.package(url: "https://github.com/vapor/jwt.git", from: "4.2.2"),
+		// 📨 A mail backend for SendGrid.
+		.package(url: "https://github.com/vapor-community/sendgrid.git", from: "5.0.0"),
     ],
     targets: [
         .executableTarget(
@@ -28,6 +33,7 @@ let package = Package(
 				.product(name: "ImperialGoogle", package: "Imperial"),
 				.product(name: "ImperialGitHub", package: "Imperial"),
 				.product(name: "JWT", package: "jwt"),
+				.product(name: "SendGrid", package: "sendgrid"),
             ]
         ),
         .testTarget(name: "AppTests", dependencies: [
@@ -38,7 +44,7 @@ let package = Package(
             .product(name: "Vapor", package: "vapor"),
             .product(name: "Fluent", package: "Fluent"),
             .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
-			.product(name: "Leaf", package: "leaf")
+			.product(name: "Leaf", package: "leaf"),
         ])
     ]
 )

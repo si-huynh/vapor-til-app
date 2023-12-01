@@ -136,6 +136,24 @@
       }
     },
     {
+      "identity" : "sendgrid",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/vapor-community/sendgrid.git",
+      "state" : {
+        "revision" : "d74f13ef312dff95df1a336244066174a40e9a31",
+        "version" : "5.0.0"
+      }
+    },
+    {
+      "identity" : "sendgrid-kit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/vapor-community/sendgrid-kit.git",
+      "state" : {
+        "revision" : "9619411220e0ea8d8f8916c27b1282aed1caf51d",
+        "version" : "2.0.2"
+      }
+    },
+    {
       "identity" : "sql-kit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vapor/sql-kit.git",

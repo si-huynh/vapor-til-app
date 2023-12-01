@@ -34,22 +34,24 @@ struct ImperialController: RouteCollection {
 			from: GitHub.self,
 			authenticate: "login-github",
 			callback: githubCallbackURL,
+			scope: ["user:email"],
 			completion: processGithubLogin
 		)
 	}
 	
 	func processGoogleLogin(request: Request, token: String) throws -> EventLoopFuture<ResponseEncodable> {
 		return try Google.getUser(on: request)
-			.flatMap { user in
+			.flatMap { userInfo in
 				User.query(on: request.db)
-					.filter(\.$username == user.email)
+					.filter(\.$username == userInfo.email)
 					.first()
 					.flatMap { foundUser in
 						guard let existingUser = foundUser
 						else {
 							let newUser = User(
-								name: user.name,
-								username: user.email,
+								name: userInfo.name,
+								username: userInfo.email,
+								email: userInfo.email,
 								password: UUID().uuidString
 							)
 							return newUser.save(on: request.db)
@@ -65,15 +67,22 @@ struct ImperialController: RouteCollection {
 	}
 	
 	func processGithubLogin(request: Request, token: String) throws -> EventLoopFuture<ResponseEncodable> {
+		let password = try Bcrypt.hash(UUID().uuidString)
 		return try GitHub.getUser(on: request)
-			.flatMap { userInfo in
+			.and(GitHub.getEmails(on: request))
+			.flatMap { userInfo, emailInfo in
 				return User.query(on: request.db)
 					.filter(\.$username == userInfo.login)
 					.first()
 					.flatMap { foundUser in
 						guard let existingUser = foundUser
 						else {
-							let user = User(name: userInfo.name, username: userInfo.login, password: UUID().uuidString)
+							let user = User(
+								name: userInfo.name,
+								username: userInfo.login,
+								email: emailInfo[0].email,
+								password: password
+							)
 							return user.save(on: request.db)
 								.map {
 									request.session.authenticate(user)
@@ -142,6 +151,10 @@ struct GitHubUserInfo: Content {
 	let login: String
 }
 
+struct GitHubEmailInfo: Content {
+	let email: String
+}
+
 extension GitHub {
 	static func getUser(on request: Request) throws -> EventLoopFuture<GitHubUserInfo> {
 		var headers = HTTPHeaders()
@@ -161,6 +174,27 @@ extension GitHub {
 				}
 				
 				return try response.content.decode(GitHubUserInfo.self)
+			}
+	}
+	
+	static func getEmails(on request: Request) throws -> EventLoopFuture<[GitHubEmailInfo]> {
+		var headers = HTTPHeaders()
+		try headers.add(name: .authorization, value: "token \(request.accessToken())")
+		headers.add(name: .userAgent, value: "vapor")
+		
+		let githubUserAPIURL: URI = "https://api.github.com/user/emails"
+		return request.client
+			.get(githubUserAPIURL, headers: headers)
+			.flatMapThrowing { response in
+				guard response.status == .ok else {
+					if response.status == .unauthorized {
+						throw Abort.redirect(to: "login-github")
+					} else {
+						throw Abort(.internalServerError)
+					}
+				}
+				
+				return try response.content.decode([GitHubEmailInfo].self)
 			}
 	}
 }

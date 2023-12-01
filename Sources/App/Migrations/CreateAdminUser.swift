@@ -16,7 +16,12 @@ struct CreateAdminUser: Migration {
 		} catch {
 			return database.eventLoop.future(error: error)
 		}
-		let user = User(name: "Admin", username: "admin", password: passwordHash)
+		let user = User(
+			name: "Admin",
+			username: "admin",
+			email: "admin@localhost.local",
+			password: passwordHash
+		)
 		return user.save(on: database)
 	}
 	

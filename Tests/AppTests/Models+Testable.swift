@@ -24,7 +24,12 @@ extension User {
 		}
 		
 		let password = try Bcrypt.hash("password")
-		let user = User(name: name, username: createUserName, password: password)
+		let user = User(
+			name: name,
+			username: createUserName,
+			email: "\(createUserName)@test.com",
+			password: password
+		)
 		try await user.save(on: database)
 		
 		return user

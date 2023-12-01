@@ -3,6 +3,7 @@ import Fluent
 import FluentPostgresDriver
 import Vapor
 import Leaf
+import SendGrid
 
 // configures your application
 public func configure(_ app: Application) async throws {
@@ -35,6 +36,7 @@ public func configure(_ app: Application) async throws {
 	app.migrations.add(CreateAcronymCategoryPivot())
 	app.migrations.add(CreateToken())
 	app.migrations.add(CreateAdminUser())
+	app.migrations.add(CreateResetPasswordToken())
 	app.logger.logLevel = .debug
 	
 	try await app.autoMigrate()
@@ -44,4 +46,6 @@ public func configure(_ app: Application) async throws {
 
     // register routes
     try routes(app)
+	
+	app.sendgrid.initialize()
 }
