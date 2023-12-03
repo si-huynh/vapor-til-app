@@ -5,9 +5,9 @@
 			"request": "launch",
 			"sourceLanguages": ["swift"],
 			"args": [],
-			"cwd": "${workspaceFolder:TILApp}",
+			"cwd": "${workspaceFolder:vapor-til-app}",
 			"name": "Debug App",
-			"program": "${workspaceFolder:TILApp}/.build/debug/App",
+			"program": "${workspaceFolder:vapor-til-app}/.build/debug/App",
 			"preLaunchTask": "swift: Build Debug App"
 		},
 		{
@@ -15,9 +15,9 @@
 			"request": "launch",
 			"sourceLanguages": ["swift"],
 			"args": [],
-			"cwd": "${workspaceFolder:TILApp}",
+			"cwd": "${workspaceFolder:vapor-til-app}",
 			"name": "Release App",
-			"program": "${workspaceFolder:TILApp}/.build/release/App",
+			"program": "${workspaceFolder:vapor-til-app}/.build/release/App",
 			"preLaunchTask": "swift: Build Release App"
 		}
 	]

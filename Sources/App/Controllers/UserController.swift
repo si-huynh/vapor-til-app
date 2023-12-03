@@ -16,6 +16,9 @@ struct UsersController: RouteCollection {
 		usersRoute.get(":userID", use: getHandler)
 		usersRoute.get(":userID", "acronyms", use: getAcronymsHandler)
 		usersRoute.post("siwa", use: signInWithApple)
+        
+        let usersRouteV2 = routes.grouped("api", "v2", "users")
+        usersRouteV2.get(":userID", use: getV2Handler)
 		
 		let basicAuthMiddleware = User.authenticator()
 		let basicAuthGroup = usersRoute.grouped(basicAuthMiddleware)
@@ -50,6 +53,15 @@ struct UsersController: RouteCollection {
 		
 		return user.convertToPublic()
 	}
+    
+    func getV2Handler(_ req: Request) async throws -> User.PublicV2 {
+        guard let user = try await User.find(req.parameters.get("userID"), on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+        
+        return user.convertToPublicV2()
+    }
 	
 	func getAcronymsHandler(_ req: Request) async throws -> [Acronym] {
 		guard let user = try await User.find(req.parameters.get("userID"), on: req.db)

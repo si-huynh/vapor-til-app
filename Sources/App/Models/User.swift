@@ -9,31 +9,34 @@ import Fluent
 import Vapor
 
 final class User: Model, Content {
-	static let schema: String = "users"
+    static let schema: String = User.v20231202.schemaName
 	
 	@ID
 	var id: UUID?
 	
-	@Field(key: "name")
+    @Field(key: User.v20231202.name)
 	var name: String
 	
-	@Field(key: "username")
+    @Field(key: User.v20231202.username)
 	var username: String
 	
-	@Field(key: "email")
+    @Field(key: User.v20231202.email)
 	var email: String
 	
 	@Children(for: \.$user)
 	var acronyms: [Acronym]
 	
-	@Field(key: "password")
+    @Field(key: User.v20231202.password)
 	var password: String
 	
-	@OptionalField(key: "siwaIdentifier")
+    @OptionalField(key: User.v20231202.siwaIdentifier)
 	var siwaIdentifier: String?
 	
-	@OptionalField(key: "profilePicture")
+    @OptionalField(key: User.v20231202.profilePicture)
 	var profilePicture: String?
+    
+    @OptionalField(key: User.v20231203.twitterURL)
+    var twitterURL: String?
 	
 	init() {}
 	
@@ -44,7 +47,8 @@ final class User: Model, Content {
 		email: String,
 		password: String,
 		siwaIdentifier: String? = nil,
-		profilePicture: String? = nil
+		profilePicture: String? = nil,
+        twitterURL: String? = nil
 	) {
 		self.name = name
 		self.username = username
@@ -52,6 +56,7 @@ final class User: Model, Content {
 		self.password = password
 		self.siwaIdentifier = siwaIdentifier
 		self.profilePicture = profilePicture
+        self.twitterURL = twitterURL
 	}
 	
 	final class Public: Content {
@@ -65,12 +70,39 @@ final class User: Model, Content {
 			self.username = username
 		}
 	}
+    
+    final class PublicV2: Content {
+        var id: UUID?
+        var name: String
+        var username: String
+        var twitterURL: String?
+        
+        init(id: UUID?,
+             name: String,
+             username: String,
+             twitterURL: String? = nil
+        ) {
+            self.id = id
+            self.name = name
+            self.username = username
+            self.twitterURL = twitterURL
+        }
+    }
 }
 
 extension User {
 	func convertToPublic() -> User.Public {
 		return User.Public(id: id, name: name, username: username)
 	}
+    
+    func convertToPublicV2() -> User.PublicV2 {
+        return User.PublicV2(
+            id: id,
+            name: name,
+            username: username,
+            twitterURL: twitterURL
+        )
+    }
 }
 
 extension User: ModelAuthenticatable {

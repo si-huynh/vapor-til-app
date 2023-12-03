@@ -31,11 +31,22 @@ public func configure(_ app: Application) async throws {
     ), as: .psql)
 	
 	app.migrations.add(CreateUser())
+    app.migrations.add(AddTwitterToUser())
+    
+    switch app.environment {
+    case .development, .testing:
+        app.migrations.add(CreateAdminUser())
+    default:
+        break
+    }
+
 	app.migrations.add(CreateAcronym())
+    app.migrations.add(CreateAcronymCategoryPivot())
+
 	app.migrations.add(CreateCategory())
-	app.migrations.add(CreateAcronymCategoryPivot())
+    app.migrations.add(MakeCategoryUnique())
+    
 	app.migrations.add(CreateToken())
-	app.migrations.add(CreateAdminUser())
 	app.migrations.add(CreateResetPasswordToken())
 	app.logger.logLevel = .debug
 	

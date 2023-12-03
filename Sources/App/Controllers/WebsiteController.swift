@@ -310,11 +310,17 @@ struct WebsiteController: RouteCollection {
 		
 		let data = try req.content.decode(RegisterData.self)
 		let password = try Bcrypt.hash(data.password)
+        
+        var twitterURL: String?
+        if let twitter = data.twitterURL, !twitter.isEmpty {
+            twitterURL = twitter
+        }
 		let user = User(
 			name: data.name,
 			username: data.username,
 			email: data.emailAddress,
-			password: password
+			password: password,
+            twitterURL: twitterURL
 		)
 		
 		try await user.save(on: req.db)
@@ -645,6 +651,7 @@ struct RegisterData: Content {
 	let password: String
 	let emailAddress: String
 	let confirmPassword: String
+    let twitterURL: String?
 }
 
 extension RegisterData: Validatable {

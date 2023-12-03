@@ -19,3 +19,12 @@ struct CreateCategory: Migration {
 		database.schema(Category.schema).delete()
 	}
 }
+
+extension Category {
+    enum v20231202 {
+        static let schemaName = "categories"
+        
+        static let id = FieldKey(stringLiteral: "id")
+        static let name = FieldKey(stringLiteral: "name")
+    }
+}

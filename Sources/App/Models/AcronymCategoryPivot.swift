@@ -8,15 +8,15 @@
 import Fluent
 
 final class AcronymCategoryPivot: Model {
-	static var schema: String = "acronym-category-pivot"
+    static var schema: String = AcronymCategoryPivot.v20231202.schemaName
 	
 	@ID
 	var id: UUID?
 	
-	@Parent(key: "acronymID")
+	@Parent(key: AcronymCategoryPivot.v20231202.acronymID)
 	var acronym: Acronym
 	
-	@Parent(key: "categoryID")
+	@Parent(key: AcronymCategoryPivot.v20231202.categoryID)
 	var category: Category
 	
 	init() {}

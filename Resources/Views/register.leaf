@@ -25,6 +25,11 @@
   			<input type="email" name="emailAddress" class="form-control" id="emailAddress"/>
 		</div>
 
+		<div class="mb-3">
+  			<label for="twitterURL">Twitter handle</label>
+  			<input type="text" name="twitterURL" class="form-control" id="twitterURL"/>
+		</div>
+
         <div class="mb-3">
 			<label for="password">Password</label>
 			<input type="password" name="password" class="form-control" id="password"/>
