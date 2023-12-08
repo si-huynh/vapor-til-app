@@ -16,6 +16,7 @@ struct UsersController: RouteCollection {
 		usersRoute.get(":userID", use: getHandler)
 		usersRoute.get(":userID", "acronyms", use: getAcronymsHandler)
 		usersRoute.post("siwa", use: signInWithApple)
+        usersRoute.get("mostRecentAcronym", use: getUserWithMostRecentAcronym)
         
         let usersRouteV2 = routes.grouped("api", "v2", "users")
         usersRouteV2.get(":userID", use: getV2Handler)
@@ -174,6 +175,17 @@ struct UsersController: RouteCollection {
 		try await token.save(on: req.db)
 		return token
 	}
+    
+    func getUserWithMostRecentAcronym(_ req: Request) async throws -> User.PublicV2 {
+        guard let user = try await User.query(on: req.db).join(Acronym.self, on: \Acronym.$user.$id == \User.$id)
+            .sort(Acronym.self, \Acronym.$createdAt, .descending)
+            .first()
+        else {
+            throw Abort(.internalServerError)
+        }
+        
+        return user.convertToPublicV2()
+    }
 }
 
 struct SignInWithAppleToken: Content {

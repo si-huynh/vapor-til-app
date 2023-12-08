@@ -13,6 +13,7 @@ struct CategoriesController: RouteCollection {
 		categoriesRoute.get(use: getAllHandler)
 		categoriesRoute.get(":categoryID", use: getHandler)
 		categoriesRoute.get(":categoryID", "acronyms", use: getAcronymsHandler)
+        categoriesRoute.get("acronyms", use: getAllCategoriesWithAcronymsAndUser)
 		
 		let tokenAuthMiddleware = Token.authenticator()
 		let guardAuthMiddleware = User.guardMiddleware()
@@ -42,4 +43,42 @@ struct CategoriesController: RouteCollection {
 				category.$acronyms.get(on: req.db)
 			}
 	}
+    
+    func getAllCategoriesWithAcronymsAndUser(_ req: Request) async throws -> [CategoryWithAcronyms] {
+        let categories = try await Category.query(on: req.db)
+            .with(\.$acronyms) { acronyms in
+                acronyms.with(\.$user)
+            }
+            .all()
+        
+        return categories.map { category in
+            let categoryAcronyms = category.acronyms.map {
+                AcronymWithUser(
+                    id: $0.id,
+                    short: $0.short,
+                    long: $0.long,
+                    user: $0.user.convertToPublic()
+                )
+            }
+            
+            return CategoryWithAcronyms(
+                id: category.id,
+                name: category.name,
+                acronyms: categoryAcronyms
+            )
+        }
+    }
+}
+
+struct AcronymWithUser: Content {
+    let id: UUID?
+    let short: String
+    let long: String
+    let user: User.Public
+}
+
+struct CategoryWithAcronyms: Content {
+    let id: UUID?
+    let name: String
+    let acronyms: [AcronymWithUser]
 }

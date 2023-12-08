@@ -30,10 +30,10 @@ final class Acronym: Model {
 	)
 	var categories: [Category]
     
-    @Timestamp(key: "created_at", on: .create)
+    @Timestamp(key: Acronym.v20231202.createdAt, on: .create)
     var createdAt: Date?
 
-    @Timestamp(key: "updated_at", on: .update)
+    @Timestamp(key: Acronym.v20231202.updatedAt, on: .update)
     var updatedAt: Date?
 	
 	

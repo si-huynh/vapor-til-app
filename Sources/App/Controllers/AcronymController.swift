@@ -7,6 +7,7 @@
 
 import Vapor
 import Fluent
+import SQLKit
 
 struct AcronymController: RouteCollection {
 	func boot(routes: RoutesBuilder) throws {
@@ -21,6 +22,7 @@ struct AcronymController: RouteCollection {
 		acronymsRoutes.get("first", use: getFirstHandler)
 		acronymsRoutes.get("sorted", use: sortedHandler)
         acronymsRoutes.get("mostRecent", use: getMostRecentAcronyms)
+        acronymsRoutes.get("raw", use: getAllAcronymsRaw)
 		
 		let tokenAuthMiddleware = Token.authenticator()
 		let guardAuthMiddleware = User.guardMiddleware()
@@ -160,6 +162,15 @@ struct AcronymController: RouteCollection {
     
     func getMostRecentAcronyms(_ req: Request) async throws -> [Acronym] {
         try await Acronym.query(on: req.db).sort(\.$updatedAt, .descending).all()
+    }
+    
+    func getAllAcronymsRaw(_ req: Request) async throws -> [Acronym] {
+        guard let sql = req.db as? SQLDatabase
+        else {
+            throw Abort(.internalServerError)
+        }
+        
+        return try await sql.raw("SELECT * FROM acronyms").all(decoding: Acronym.self)
     }
 }
 

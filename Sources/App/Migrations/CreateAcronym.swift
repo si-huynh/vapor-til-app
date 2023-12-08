@@ -17,6 +17,8 @@ struct CreateAcronym: Migration {
                 Acronym.v20231202.userID,
                 .uuid, .required,
                 .references(User.v20231202.schemaName, User.v20231202.id))
+            .field(Acronym.v20231202.createdAt, .datetime)
+            .field(Acronym.v20231202.updatedAt, .datetime)
 			.create()
 	}
 	
@@ -33,5 +35,7 @@ extension Acronym {
         static let short = FieldKey(stringLiteral: "short")
         static let long = FieldKey(stringLiteral: "long")
         static let userID = FieldKey(stringLiteral: "userID")
+        static let createdAt = FieldKey(stringLiteral: "created_at")
+        static let updatedAt = FieldKey(stringLiteral: "updated_at")
     }
 }
