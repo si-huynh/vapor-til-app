@@ -9,7 +9,7 @@ import Fluent
 
 struct CreateAcronymCategoryPivot: Migration {
 	func prepare(on database: Database) -> EventLoopFuture<Void> {
-		database.schema(AcronymCategoryPivot.schema)
+        database.schema(AcronymCategoryPivot.v20231202.schemaName)
 			.id()
 			.field(
                 AcronymCategoryPivot.v20231202.acronymID,

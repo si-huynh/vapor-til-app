@@ -20,6 +20,7 @@ struct AcronymController: RouteCollection {
 		acronymsRoutes.get("search", use: searchHandler)
 		acronymsRoutes.get("first", use: getFirstHandler)
 		acronymsRoutes.get("sorted", use: sortedHandler)
+        acronymsRoutes.get("mostRecent", use: getMostRecentAcronyms)
 		
 		let tokenAuthMiddleware = Token.authenticator()
 		let guardAuthMiddleware = User.guardMiddleware()
@@ -156,6 +157,10 @@ struct AcronymController: RouteCollection {
 					.transform(to: .noContent)
 			}
 	}
+    
+    func getMostRecentAcronyms(_ req: Request) async throws -> [Acronym] {
+        try await Acronym.query(on: req.db).sort(\.$updatedAt, .descending).all()
+    }
 }
 
 struct CreateAcronymData: Content {

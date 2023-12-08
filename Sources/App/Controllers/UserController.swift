@@ -29,6 +29,9 @@ struct UsersController: RouteCollection {
 		
 		let tokenAuthGroup = usersRoute.grouped(tokenAuthMiddleware, guardAuthMiddleware)
 		tokenAuthGroup.post(use: createHandler)
+        tokenAuthGroup.delete(":userID", use: deleteHandler)
+        tokenAuthGroup.post(":userID", "restore", use: restoreHandler)
+        tokenAuthGroup.delete(":userID", "force", use: forceDeleteHandler)
 	}
 	
 	func createHandler(_ req: Request) async throws -> User.Public {
@@ -80,6 +83,58 @@ struct UsersController: RouteCollection {
 		
 		return token
 	}
+    
+    func deleteHandler(_ req: Request) async throws -> HTTPStatus {
+        let requestUser = try req.auth.require(User.self)
+        guard requestUser.userType == .admin
+        else {
+            throw Abort(.forbidden)
+        }
+        
+        guard let user = try await User.find(req.parameters.get("userID"), on: req.db)
+        else {
+            return .notFound
+        }
+        
+        do {
+            try await user.delete(on: req.db)
+            return .noContent
+        } catch {
+            return .internalServerError
+        }
+    }
+    
+    func restoreHandler(_ req: Request) async throws -> HTTPStatus {
+        let userID = try req.parameters.require("userID", as: UUID.self)
+        guard let user = try await User.query(on: req.db)
+            .withDeleted()
+            .filter(\.$id == userID)
+            .first()
+        else {
+            return .notFound
+        }
+        
+        do {
+            try await user.restore(on: req.db)
+            return .ok
+        } catch {
+            return .internalServerError
+        }
+    }
+    
+    func forceDeleteHandler(_ req: Request) async throws -> HTTPStatus {
+        guard let user = try await User.find(req.parameters.get("userID"), on: req.db)
+        else {
+            return .notFound
+        }
+        
+        do {
+            try await user.delete(force: true, on: req.db)
+            return .noContent
+        } catch {
+            return .internalServerError
+        }
+    }
 	
 	func signInWithApple(_ req: Request) async throws -> Token {
 		let data = try req.content.decode(SignInWithAppleToken.self)

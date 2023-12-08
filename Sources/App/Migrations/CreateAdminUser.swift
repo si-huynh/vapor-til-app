@@ -17,6 +17,7 @@ struct CreateAdminUser: Migration {
 			return database.eventLoop.future(error: error)
 		}
 		let user = User(
+            userType: UserType.standard,
 			name: "Admin",
 			username: "admin",
 			email: "admin@localhost.local",

@@ -13,6 +13,9 @@ final class User: Model, Content {
 	
 	@ID
 	var id: UUID?
+    
+    @Enum(key: FieldKey(stringLiteral: User.v20231202.userType))
+    var userType: UserType
 	
     @Field(key: User.v20231202.name)
 	var name: String
@@ -35,6 +38,9 @@ final class User: Model, Content {
     @OptionalField(key: User.v20231202.profilePicture)
 	var profilePicture: String?
     
+    @Timestamp(key: User.v20231202.deletedAt, on: .delete)
+    var deletedAt: Date?
+    
     @OptionalField(key: User.v20231203.twitterURL)
     var twitterURL: String?
 	
@@ -42,6 +48,7 @@ final class User: Model, Content {
 	
 	init(
 		id: UUID? = nil,
+        userType: UserType = .standard,
 		name: String,
 		username: String,
 		email: String,
@@ -50,6 +57,7 @@ final class User: Model, Content {
 		profilePicture: String? = nil,
         twitterURL: String? = nil
 	) {
+        self.userType = userType
 		self.name = name
 		self.username = username
 		self.email = email

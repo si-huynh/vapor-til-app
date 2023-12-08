@@ -11,7 +11,7 @@ struct CreateCategory: Migration {
 	func prepare(on database: Database) -> EventLoopFuture<Void> {
 		database.schema(Category.schema)
 			.id()
-			.field("name", .string, .required)
+            .field(Category.v20231202.name, .string, .required)
 			.create()
 	}
 	
